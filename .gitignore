@@ -1,0 +1,16 @@
+*.mp4
+*.mkv
+*.xml
+*.txt
+report*
+*.dot
+.idea/
+*.vym
+.gdb_history
+*ghidra/
+.vscode/
+core
+Solutions/
+*old.pdf
+Additional_material/
+06Lab_Angr/
