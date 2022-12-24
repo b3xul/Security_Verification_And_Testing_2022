@@ -1,0 +1,65 @@
+ (*
+   Sample signature protocol
+ *)
+
+type pkey.	(* public key *)
+type skey.	(* private key *)
+type keymat.	(* key material *)
+type result.	(* result of check signature *)
+type string.
+
+free c:channel.		(* the public channel *)
+free sw:bitstring. 	(* the software *)
+free swd:string.		(* the software description *)
+
+(* Public-key Encryption *)
+fun penc(bitstring, pkey): bitstring.
+fun pk(keymat): pkey.
+fun sk(keymat): skey.
+reduc forall x:bitstring, y:keymat; pdec(penc(x,pk(y)),sk(y)) = x.
+
+(* Signatures *)
+fun ok():result.
+fun sign(bitstring, skey): bitstring.
+reduc forall m:bitstring, y:keymat; getmess(sign(m,sk(y))) = m.
+reduc forall m:bitstring, y:keymat; checksign(sign(m,sk(y)), pk(y)) = ok().
+
+event issued(bitstring,string).
+event authenticated(bitstring,string).
+
+query sw: bitstring, swd: string;
+	event(authenticated(sw,swd)) ==> event(issued(sw,swd)).
+
+(* Test reachability *)
+event endS().
+event endR().
+
+query event(endS()).
+query event(endR()).
+
+
+(* The process *)
+
+let pS(kpS: keymat, sw:bitstring, swd: string) =
+	 event issued(sw,swd);
+         out( c, (sign((sw,swd), sk(kpS))) );
+	 event endS(); 0. 
+
+let pR(pkS: pkey) =
+         in(c, y:bitstring);
+	 let (ysw: bitstring ,yswd: string) = getmess(y) in
+         if checksign(y, pkS)=ok() then
+	 event authenticated(ysw,yswd); 
+	 event endR(); 0. 
+
+process 
+         new kpS:keymat;
+	 !(new sw:bitstring; new swd:string; !pS(kpS,sw,swd))
+         | !pR(pk(kpS))
+
+
+(* EXPECTPV
+Query event(authenticated(sw_3,swd_3)) ==> event(issued(sw_3,swd_3)) is true.
+Query not event(endS) is false.
+Query not event(endR) is false.
+END *)

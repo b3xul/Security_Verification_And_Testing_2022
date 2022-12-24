@@ -1,0 +1,44 @@
+ (*
+   Example of weak secret 
+ *)
+
+free c:channel.			(* the public channel *)
+free s:bitstring [private]. 	(* the secret *)
+
+(* Cryptographic Hash *)
+fun hash(bitstring): bitstring.
+
+(* Test whether s is secret *)
+query attacker(s).
+
+(* Test whether s is subject to offline guessing attacks *)
+weaksecret s.
+
+(* Test reachability *)
+event endS().
+event endR().
+query event(endS()).
+query event(endR()).
+
+(* The process *)
+
+let pS() =
+  out(c, hash(s));
+  event endS(); 0. 
+
+let pR() =
+  in(c, y:bitstring); 
+	event endR(); 0. 
+
+process 
+  (
+   !pS()  | !pR()
+  )
+
+
+(* EXPECTPV
+Query not attacker(s[]) is true.
+Weak secret s is false.
+Query not event(endS) is false.
+Query not event(endR) is false.
+END *)

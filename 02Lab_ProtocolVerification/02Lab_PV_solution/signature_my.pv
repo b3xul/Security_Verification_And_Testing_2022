@@ -1,0 +1,63 @@
+(* Simple signature protocol (typed) *)
+
+type pkey.	(* public key *)
+type skey.	(* private key *)
+type keymat.	(* key material *)
+type result.	(* result of check signature *)
+type string.    (* description of the software *)
+
+free c:channel.			(* the public channel *)
+free sw:bitstring. 	(* the software *)
+free swd:string . 	 (* the software description *)
+
+(* Public-key Encryption *)
+fun penc(bitstring, pkey): bitstring.
+fun pk(keymat): pkey.
+fun sk(keymat): skey.
+reduc forall x:bitstring, y:keymat; pdec(penc(x,pk(y)),sk(y)) = x.
+
+(* Signatures *)
+fun ok():result.
+fun sign(bitstring, skey): bitstring.
+reduc forall m:bitstring, y:keymat; getmess(sign(m,sk(y))) = m.
+reduc forall m:bitstring, y:keymat; checksign(sign(m,sk(y)), pk(y)) = ok().
+
+(* Test reachability *)
+event endIssuer().
+event endReceiver().
+query event(endIssuer()).
+query event(endReceiver()).
+
+(* Test software and software description authenticity *)
+event issuedData(bitstring,string).
+event receivedData(bitstring,string).
+query sw:bitstring,swd:string; event(receivedData(sw,swd)) ==> event(issuedData(sw,swd)).
+(* Basic correspondence: whenever an event occurs, another event must have occurred in the past: we just need that the client receive a valid software.
+Injective correspondence: there must be a 1:1 correspondence between events. Whenever there is a bS event, there must be a distint eC event associated to it: we don't need the server to be the one always send that software to each client. In fact in this case the injectivity is not guaranteed *)
+
+(* The process *)
+let pIssuer(kpIssuer: keymat, sw: bitstring, swd: string) =
+  event issuedData(sw,swd);
+  out(c, sign((sw,swd),sk(kpIssuer)));
+  
+  event endIssuer(); 0. 
+
+let pReceiver(pkIssuer: pkey) =
+  in(c, signature: bitstring);
+  if checksign(signature, pkIssuer) = ok()
+    then
+    let (swR: bitstring, swdR: string)=getmess(signature) in
+    event receivedData(swR,swdR);
+    event endReceiver(); 0. 
+	      
+process 
+  new kpS:keymat;
+  (
+    !(new sw:bitstring; new swd:string; pIssuer(kpS,sw,swd)) | !pReceiver(pk(kpS))
+  )
+
+(* EXPECTPV
+Query not event(endIssuer) is false.
+Query not event(endReceiver) is false.
+Query event(receivedData(sw_3,swd_3)) ==> event(issuedData(sw_3,swd_3)) is true.
+END *)

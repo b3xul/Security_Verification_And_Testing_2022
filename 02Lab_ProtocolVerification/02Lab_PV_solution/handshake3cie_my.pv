@@ -1,0 +1,104 @@
+ (*
+   Sample handshake protocol (typed version)
+ *)
+
+type pkey.	(* public key *)
+type skey.	(* private key *)
+type keymat.	(* key material *)
+type result.	(* result of check signature *)
+
+free c:channel.			(* the public channel *)
+free s:bitstring [private]. 	(* the secret *)
+free s2:bitstring [private]. 	(* the other secret *)
+
+(* Public-key Encryption *)
+fun penc(bitstring, pkey): bitstring.
+fun pk(keymat): pkey.
+fun sk(keymat): skey.
+reduc forall x:bitstring, y:keymat; pdec(penc(x,pk(y)),sk(y)) = x.
+
+(* Signatures *)
+fun ok():result.
+fun sign(bitstring, skey): bitstring.
+reduc forall m:bitstring, y:keymat; getmess(sign(m,sk(y))) = m.
+reduc forall m:bitstring, y:keymat; checksign(sign(m,sk(y)), pk(y)) = ok().
+
+(* Shared-key cryptography *)
+fun senc(bitstring, bitstring): bitstring.
+reduc forall x: bitstring, y: bitstring; sdec(senc(x,y),y) = x.
+
+
+(* Test whether s is secret *)
+query attacker(s).
+(* Test whether s2 is secret *)
+query attacker(s2).
+(* Test whether nonce is secret  This gives an error? Error: n cannot be used in queries, not, or nounif. Its definition is ambiguous. (For example, several restrictions might define n.). solved!
+*)
+query attacker(new n).
+query attacker(new n2).
+
+(* Test reachability *)
+event endS().
+event endC().
+query event(endS()).
+query event(endC()).
+
+(* Test server authentication *)
+event bS(pkey,pkey,bitstring,bitstring).
+event eC(pkey,pkey,bitstring,bitstring).
+query x:pkey,y:pkey,z:bitstring,w:bitstring; inj-event(eC(x,y,z,w)) ==> inj-event(bS(x,y,z,w)).
+
+(* Test secret autheticity *)
+event sS(pkey,pkey,bitstring).
+event sC(pkey,pkey,bitstring).
+query x:pkey,y:pkey,z:bitstring; inj-event(sS(x,y,z)) ==> inj-event(sC(x,y,z)).
+
+(* The process *)
+
+let pS(kpS: keymat, pkC: pkey) =
+  in(c, yn: bitstring);
+  new k:bitstring;
+  event bS(pk(kpS),pkC,k,yn);
+  out(c, penc(sign((yn,k), sk(kpS)), pkC));
+ 	in(c,x:bitstring);
+  let xs=sdec(x, k) in
+    event sS(pk(kpS),pkC,xs);
+    event endS(); 0. 
+
+let pC1(kpC: keymat, pkS: pkey, s: bitstring) =
+  new n: bitstring;
+  out(c, n);
+  in(c, y:bitstring); 
+  let y1=pdec(y, sk(kpC)) in
+    if checksign(y1, pkS)=ok() then
+      let (=n,xk: bitstring)=getmess(y1) in
+	      event eC(pkS,pk(kpC),xk,n);
+	      event sC(pkS,pk(kpC),s);
+        out(c, senc(s, xk)); 
+	      event endC(); 0. 
+    
+let pC2(kpC: keymat, pkS: pkey, s: bitstring) =
+  new n2: bitstring;
+  out(c, n2);
+  in(c, y:bitstring); 
+  let y1=pdec(y, sk(kpC)) in
+    if checksign(y1, pkS)=ok() then
+      let (=n2,xk: bitstring)=getmess(y1) in
+	      event eC(pkS,pk(kpC),xk,n2);
+	      event sC(pkS,pk(kpC),s);
+        out(c, senc(s, xk)); 
+	      event endC(); 0. 
+	      
+process 
+  new kpS:keymat; new kpC:keymat;
+  (!out(c, pk(kpS)); 0 | !out(c, pk(kpC)); 0 |
+   !pS(kpS, pk(kpC))  | !pC1(kpC, pk(kpS), s) | !pC2(kpC, pk(kpS), s2))
+
+
+(* EXPECTPV
+Query not attacker(s[]) is true.
+Query not event(endS) is false.
+Query not event(endC) is false.
+Query inj-event(eC(x_1,y_1,z,w)) ==> inj-event(bS(x_1,y_1,z,w)) is true.
+Query inj-event(srecv(x_1,y_1,z)) ==> inj-event(ssend(x_1,y_1,z)) is true.
+END *)

@@ -1,0 +1,75 @@
+ (*
+   Sample handshake protocol (typed version)
+ *)
+
+type pkey.	(* public key *)
+type skey.	(* private key *)
+type keymat.	(* key material *)
+type result.	(* result of check signature *)
+
+free c:channel.			(* the public channel *)
+free s:bitstring [private]. 	(* the secret *)
+
+(* Public-key Encryption *)
+fun penc(bitstring, pkey): bitstring.
+fun pk(keymat): pkey.
+fun sk(keymat): skey.
+reduc forall x:bitstring, y:keymat; pdec(penc(x,pk(y)),sk(y)) = x.
+
+(* Signatures *)
+fun ok():result.
+fun sign(bitstring, skey): bitstring.
+reduc forall m:bitstring, y:keymat; getmess(sign(m,sk(y))) = m.
+reduc forall m:bitstring, y:keymat; checksign(sign(m,sk(y)), pk(y)) = ok().
+
+(* Shared-key cryptography *)
+fun senc(bitstring, bitstring): bitstring.
+reduc forall x: bitstring, y: bitstring; sdec(senc(x,y),y) = x.
+
+
+(* Test whether s is secret *)
+query attacker(s).
+
+(* Test reachability *)
+event endS().
+event endC().
+query event(endS()).
+query event(endC()).
+
+(* Test authentication *)
+event bS(pkey,pkey,bitstring).
+event eC(pkey,pkey,bitstring).
+query x:pkey,y:pkey,z:bitstring; inj-event(eC(x,y,z)) ==> inj-event(bS(x,y,z)).
+
+(* The process *)
+
+let pS(kpS: keymat, pkC: pkey) =
+         new k:bitstring;
+	 event bS(pk(kpS),pkC,k);
+         out(c, penc(sign(k, sk(kpS)), pkC));
+ 	 in(c,x:bitstring);
+         let xs=sdec(x, k) in 
+         event endS(); 0. 
+
+let pC(kpC: keymat, pkS: pkey) =
+         in(c, y:bitstring); 
+         let y1=pdec(y, sk(kpC)) in
+         if checksign(y1, pkS)=ok() then
+         let xk=getmess(y1) in
+	 event eC(pkS,pk(kpC),xk);
+         out(c, senc(s, xk)); 
+	 event endC(); 0. 
+
+process 
+         new kpS:keymat; new kpC:keymat;
+         (!out(c, pk(kpS)); 0 | !out(c, pk(kpC)); 0 |
+          !pS(kpS, pk(kpC))  | !pC(kpC, pk(kpS))
+         )
+
+
+(* EXPECTPV
+Query not attacker(s[]) is true.
+Query not event(endS) is false.
+Query not event(endC) is false.
+Query inj-event(eC(x_1,y_1,z)) ==> inj-event(bS(x_1,y_1,z)) is true.
+END *)
